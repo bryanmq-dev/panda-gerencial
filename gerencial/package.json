@@ -1,0 +1,26 @@
+{
+  "name": "panda-gerencial",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3012",
+    "build": "next build",
+    "start": "next start -p 3012",
+    "test": "node --test lib/kgi.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "next": "16.4.6",
+    "pg": "^8.23.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.10.1",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/pg": "^8",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

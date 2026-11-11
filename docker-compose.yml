@@ -1,0 +1,47 @@
+name: panda-final
+
+# Tres servicios: un Postgres con dos bases (transaccional y almacén) y las
+# dos aplicaciones Next.js. Credenciales de demostración: cámbielas fuera de clase.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: panda
+      POSTGRES_PASSWORD: panda
+    ports: ["5441:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # las bases existen recién cuando termina el seeder y la primera carga
+      test: ["CMD-SHELL", "psql -U panda -d panda_dw -tAc 'select 1 from ctl.kgi limit 1' | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  ventas:
+    build: ./ventas
+    environment:
+      DATABASE_URL: postgres://panda:panda@db:5432/panda_oltp
+    ports: ["3001:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  gerencial:
+    build: ./gerencial
+    environment:
+      DATABASE_URL: postgres://panda:panda@db:5432/panda_dw
+      DATABASE_URL_RO: postgres://gerente_ro:gerente_ro@db:5432/panda_dw
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
+    # ANTHROPIC_API_KEY sale de .env (copie .env.example); sin clave el asistente lo avisa y el resto funciona
+    env_file:
+      - path: .env
+        required: false
+      - path: ../.env
+        required: false
+    ports: ["3012:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:
