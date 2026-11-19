@@ -6,7 +6,10 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { dw } = await import("./lib/db");
+  const { snapshotTick } = await import("./lib/snapshot");
   setInterval(() => {
-    dw.query("SELECT ctl.etl_tick()").catch((e) => console.error("ETL:", e.message));
+    dw.query("SELECT ctl.etl_tick()")
+      .then(() => snapshotTick())     // el snapshot inicial y el programado de cada mes
+      .catch((e) => console.error("ETL/snapshot:", e.message));
   }, 20_000);
 }

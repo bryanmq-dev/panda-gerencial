@@ -74,8 +74,31 @@ etiqueta); siguientes: valores. Cada guardado crea una **versión nueva** (`ctl.
 (`sistema`, `manual` o `ia`); la consulta anterior nunca se pisa.
 
 Un **KGI** es un objetivo sobre un KPI de serie mensual: meta, fecha de inicio, fecha de fin, tipo de medida
-(monetaria, operativa, comercial o calidad). La comparación arranca en el valor que el KPI tenía en el mes de
-inicio y usa solo meses cerrados (`gerencial/lib/kgi.ts`, con pruebas: `npm test`).
+(monetaria, operativa, comercial o calidad). El avance se mide desde el **valor de inicio**: al abrir el objetivo se
+guarda el valor que el indicador tiene en ese momento (editable en el formulario) y el avance es
+`(actual − inicio) ÷ (meta − inicio)`. Así un objetivo abierto a mitad de mes se mueve con cada venta; medido
+desde el valor mensual del mes de inicio, ese punto coincidiría con el actual y el avance quedaría siempre en cero.
+Un objetivo sin valor de inicio (anterior a este cambio) usa el valor del mes de inicio
+(`gerencial/lib/kgi.ts`, con pruebas: `npm test`).
+
+## Snapshots: foto y movimientos
+
+El tablero distingue dos lecturas de cada indicador:
+
+- **Última snapshot** (azul): una foto congelada de todos los KPI (`ctl.snapshot` y `ctl.snapshot_kpi`).
+- **Últimos movimientos** (naranja): lo que cambió desde esa foto, leído en vivo del almacén. En una serie
+  continúa la misma línea; en barras por categoría va al lado de cada barra; en las barras de avance de los
+  objetivos es el tramo naranja sobre el azul (rayado si hoy está por debajo de la foto). Si nada se movió, no
+  hay naranja.
+
+*Carga de datos → Crear Snapshot* corre el ETL pendiente y toma una foto nueva: el naranja se consolida en azul.
+El calendario es mensual y propio: un snapshot programado el día `dia_mes` (por defecto el 26, configurable de
+1 a 28). **Uno manual no ocupa ese turno**: si se crea el 12, el siguiente programado sigue siendo el 26. Si el
+servicio estuvo caído el día del turno, se toma al volver. La primera foto se toma sola al arrancar.
+
+Una foto vale mientras no se cambie la consulta de su KPI; si se edita, esa curva vuelve a leerse en vivo hasta
+el siguiente snapshot. El mes en curso cuenta a su fecha de corte, así que en sumas (ventas, merma) el último
+punto es parcial: por eso va con el naranja o con la foto del día, no como un mes cerrado.
 
 Cada indicador muestra de dónde sale: las tablas que su consulta toca, tomadas del plan de ejecución, y las
 llaves que las enlazan.
@@ -106,7 +129,7 @@ Credenciales de demostración (`panda`, `gerente_ro`): cámbielas fuera de clase
 
 ```
 docker-compose.yml
-db/        00_init.sh · oltp/ (esquema, seeder) · dw/ (esquema estrella, ETL, control y KPI de fábrica)
+db/        00_init.sh · oltp/ (esquema, seeder) · dw/ (esquema estrella, ETL, control y KPI de fábrica, snapshots)
 ventas/    Next.js — registro de visitas, lotes e inspección
 gerencial/ Next.js — control de operaciones, KPI, objetivos, asistente, ETL
 ```

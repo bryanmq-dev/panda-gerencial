@@ -54,7 +54,8 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .mitades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 860px) { .dos, .mitades, .tres, .cuatro { grid-template-columns: minmax(0, 1fr); } }
+.cinco { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 860px) { .dos, .mitades, .tres, .cuatro, .cinco { grid-template-columns: minmax(0, 1fr); } }
 
 label { display: block; font-size: 12px; color: var(--tinta-2); margin-bottom: 10px; }
 input, select, textarea {
@@ -131,3 +132,14 @@ pre.sql {
 .burbuja { max-width: 85%; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; }
 .burbuja.yo { align-self: flex-end; background: var(--frio); color: #fff; }
 .burbuja.ia { align-self: flex-start; background: var(--papel); border: 1px solid var(--linea); }
+
+/* Snapshot (azul) y movimientos desde entonces (naranja) */
+:root { --movimiento: #e07b00; }
+.leyenda { display: flex; gap: 16px; margin: 6px 0 0; font-size: 12px; color: var(--tinta-2); }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.progreso.dual { position: relative; }
+.progreso.dual > i { position: absolute; top: 0; height: 100%; border-radius: 0; }
+.progreso.dual > i.snap { left: 0; background: var(--frio); }
+.progreso.dual > i.mov { background: var(--movimiento); }
+.progreso.dual > i.mov.baja { background: repeating-linear-gradient(45deg, var(--movimiento) 0 3px, #f3c48a 3px 6px); }
+.progreso.dual.bien > i.snap { background: var(--bien); }

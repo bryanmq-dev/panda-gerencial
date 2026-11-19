@@ -1,9 +1,11 @@
 import { q } from "@/lib/db";
-import { configurarEtl, ejecutarEtl } from "../acciones";
+import { estadoSnapshots } from "@/lib/snapshot";
+import { configurarEtl, configurarSnapshot, crearSnapshotManual, ejecutarEtl } from "../acciones";
 
 const n = (v: number) => v.toLocaleString("es-BO");
 
 export default async function Etl() {
+  const snaps = await estadoSnapshots();
   const [[cfg], marcas, corridas] = await Promise.all([
     q(`SELECT intervalo_min, activo FROM ctl.etl_config`),
     // conciliación: lo que hay en el origen contra lo que ya está en el almacén
@@ -59,6 +61,40 @@ export default async function Etl() {
           </table>
         </section>
       </div>
+
+      <section className="tarjeta" style={{ marginBottom: 16 }}>
+        <h2>Snapshots</h2>
+        <p className="tenue" style={{ margin: "0 0 12px", maxWidth: "70ch" }}>
+          Un snapshot es una foto de todos los indicadores. El tablero dibuja la última foto en azul y, en naranja, lo que se
+          movió desde entonces. Crear un snapshot carga los datos pendientes y consolida: la foto pasa a ser el estado actual.
+        </p>
+        <div className="rejilla dos">
+          <div>
+            <form action={crearSnapshotManual}><button>Crear Snapshot</button></form>
+            <p style={{ margin: "12px 0 4px" }}>
+              Próximo snapshot programado: <strong>{snaps.proxima.split("-").reverse().join("/")}</strong>
+              {snaps.vencida && <span className="chip alerta" style={{ marginLeft: 8 }}>se toma en unos segundos</span>}
+              {!snaps.activo && <span className="chip gris" style={{ marginLeft: 8 }}>pausado</span>}
+            </p>
+            <p className="tenue" style={{ margin: 0 }}>Uno manual no mueve ese día: el calendario sigue siendo mensual.</p>
+            <form action={configurarSnapshot} style={{ marginTop: 16 }}>
+              <label>Día del mes del snapshot programado (1 a 28)<input name="dia" type="number" min="1" max="28" defaultValue={snaps.dia} /></label>
+              <div className="opciones"><label><input type="checkbox" name="activo" defaultChecked={snaps.activo} />Snapshot programado activo</label></div>
+              <div className="acciones"><button className="suave">Guardar calendario</button></div>
+            </form>
+          </div>
+          <table>
+            <thead><tr><th>Nº</th><th>Creado</th><th>Corte</th><th>Origen</th></tr></thead>
+            <tbody>
+              {snaps.lista.map((x) => (
+                <tr key={x.id}><td>{x.id}</td><td>{x.cuando}</td><td>{x.corte.split("-").reverse().join("/")}</td>
+                  <td><span className={`chip ${x.origen === "manual" ? "alerta" : "gris"}`}>{x.origen}</span></td></tr>
+              ))}
+              {!snaps.lista.length && <tr><td colSpan={4} className="tenue">Aún no hay snapshots.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="tarjeta">
         <h2>Últimas corridas</h2>

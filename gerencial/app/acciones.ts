@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { consultar, dw, enlaces, q, type Enlace, type Resultado } from "@/lib/db";
 import { mensajeDeError, proponer, type RespuestaIA, type Turno } from "@/lib/ia";
 import { GRAFICOS, TIPOS } from "@/lib/kpi";
+import { crearSnapshot } from "@/lib/snapshot";
 
 const txt = (v: unknown) => String(v ?? "").trim();
 const de = (v: unknown, opciones: string[]) => (opciones.includes(txt(v)) ? txt(v) : opciones[0]);
@@ -82,15 +83,22 @@ export async function archivarKpi(fd: FormData) {
   redirect("/");
 }
 
+export async function restaurarKpi(fd: FormData) {
+  const id = Number(fd.get("id"));
+  await q(`UPDATE ctl.kpi SET archivado = false WHERE id = $1`, [id]);
+  redirect(`/kpi/${id}`);
+}
+
 // ---------- KGI: objetivos sobre un KPI ----------
 
 export async function crearKgi(fd: FormData) {
   const kpiId = Number(fd.get("kpi_id"));
   await q(
-    `INSERT INTO ctl.kgi (kpi_id, nombre, descripcion, tipo_medida, meta, desde, hasta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO ctl.kgi (kpi_id, nombre, descripcion, tipo_medida, meta, valor_base, desde, hasta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    // valor_base: lo que valía el indicador al abrir la operación; de ahí se mide el avance
     [kpiId, txt(fd.get("nombre")), txt(fd.get("descripcion")), de(fd.get("tipo_medida"), TIPOS),
-     Number(fd.get("meta")), txt(fd.get("desde")), txt(fd.get("hasta"))],
+     Number(fd.get("meta")), txt(fd.get("base")) === null ? null : Number(fd.get("base")), txt(fd.get("desde")), txt(fd.get("hasta"))],
   );
   revalidatePath("/");
   redirect(`/kpi/${kpiId}#objetivos`);
@@ -111,6 +119,20 @@ export async function ejecutarEtl() {
 export async function configurarEtl(fd: FormData) {
   await q(`UPDATE ctl.etl_config SET intervalo_min = $1, activo = $2`,
     [Math.max(1, Math.trunc(Number(fd.get("intervalo")) || 5)), fd.get("activo") === "on"]);
+  revalidatePath("/etl");
+}
+
+// ---------- snapshots ----------
+
+/** Consolida: corre el ETL y toma la foto de todos los KPI. No mueve el turno programado. */
+export async function crearSnapshotManual() {
+  await crearSnapshot("manual");
+  revalidatePath("/", "layout");
+}
+
+export async function configurarSnapshot(fd: FormData) {
+  await q(`UPDATE ctl.snapshot_config SET dia_mes = $1, activo = $2`,
+    [Math.min(28, Math.max(1, Math.trunc(Number(fd.get("dia")) || 26))), fd.get("activo") === "on"]);
   revalidatePath("/etl");
 }
 

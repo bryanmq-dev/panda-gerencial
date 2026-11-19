@@ -11,6 +11,7 @@ export type Kpi = {
   sql: string;
   grafico: string;
   origen: string;
+  archivado: boolean;
 };
 
 export type KgiFila = {
@@ -20,6 +21,7 @@ export type KgiFila = {
   descripcion: string;
   tipo_medida: string;
   meta: number;
+  valor_base: number | null;
   desde: string;
   hasta: string;
   cerrado: boolean;
@@ -30,10 +32,11 @@ export const GRAFICOS = ["linea", "barra", "torta", "tabla"];
 
 const SELECCION = `
   SELECT k.id, k.nombre, k.descripcion, k.unidad, k.tipo_medida, k.sentido,
-         v.version, v.sql, v.grafico, v.origen
+         v.version, v.sql, v.grafico, v.origen, k.archivado
   FROM ctl.kpi k JOIN ctl.kpi_version v ON v.kpi_id = k.id AND v.version = k.version_actual`;
 
 export const kpis = () => q<Kpi>(`${SELECCION} WHERE NOT k.archivado ORDER BY k.id`);
+export const archivados = () => q<Kpi>(`${SELECCION} WHERE k.archivado ORDER BY k.id`);
 export const kpi = async (id: number) => (await q<Kpi>(`${SELECCION} WHERE k.id = $1`, [id]))[0];
 
 export const kgis = (kpiId?: number) =>

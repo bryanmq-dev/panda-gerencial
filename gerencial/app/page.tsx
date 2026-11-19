@@ -1,23 +1,39 @@
 import Link from "next/link";
 import { q } from "@/lib/db";
 import { esSerie, evaluar } from "@/lib/kgi";
-import { fmt, hoy, kgis, kpis, mesCorto, serie } from "@/lib/kpi";
+import { archivados, fmt, hoy, kgis, kpis, mesCorto, serie } from "@/lib/kpi";
+import { restaurarKpi } from "./acciones";
+import { estadoSnapshots, foto, ultimoSnapshot } from "@/lib/snapshot";
+import { combinar } from "@/lib/snapshot-reglas";
+import Avance from "./_c/Avance";
 import Grafico from "./_c/Grafico";
 
 export default async function Control() {
-  const [ks, gs, [etl]] = await Promise.all([
+  const [ks, gs, [etl], arch] = await Promise.all([
     kpis(),
     kgis(),
     q(`SELECT to_char(fin AT TIME ZONE 'America/La_Paz', 'DD/MM HH24:MI') fin, estado FROM ctl.etl_corrida ORDER BY id DESC LIMIT 1`),
+    archivados(),
   ]);
-  const series = await Promise.all(ks.map(serie));
+  const [series, snap, prog] = await Promise.all([Promise.all(ks.map(serie)), ultimoSnapshot(), estadoSnapshots()]);
+  const fotos = snap ? await foto(snap.id) : new Map();
   const dia = hoy();
+  // la foto de un KPI vale mientras no se haya cambiado su consulta
+  const pares = ks.map((k, i) => {
+    const f = fotos.get(k.id);
+    return combinar(f && f.version === k.version ? f.filas : series[i].filas, series[i].filas);
+  });
   const mesActual = dia.slice(0, 7) + "-01";
   const porId = new Map(ks.map((k, i) => [k.id, { k, s: series[i] }]));
 
   const objetivos = gs.filter((g) => !g.cerrado && porId.has(g.kpi_id)).map((g) => {
     const { k, s } = porId.get(g.kpi_id)!;
-    return { g, k, e: evaluar(g, k.sentido, s.filas, dia) };
+    const base = pares[ks.indexOf(k)].snapshot;
+    return {
+      g, k,
+      e: evaluar(g, k.sentido, base, snap?.corte ?? dia, true),    // lo que decía el último snapshot, mes en curso incluido a su corte
+      vivo: evaluar(g, k.sentido, s.filas, dia, true),              // lo de hoy, fuera del snapshot
+    };
   });
 
   return (
@@ -27,6 +43,7 @@ export default async function Control() {
         Cada indicador (KPI) sale de una consulta sobre el almacén de datos. Sobre un indicador se abre una operación con
         un objetivo (KGI): desde ese momento se mide cuánto del camino hacia la meta se ha recorrido.
         {etl && <> Última carga de datos: {etl.fin ?? "en curso"} <span className={`chip ${etl.estado === "ok" ? "bien" : "mal"}`}>{etl.estado}</span></>}
+        {snap && <> Último snapshot: {snap.cuando}; próximo programado el {prog.proxima.split("-").reverse().join("/")}.</>}
       </p>
 
       <section className="tarjeta" style={{ marginBottom: 16 }}>
@@ -40,7 +57,7 @@ export default async function Control() {
                   <th className="num">Actual</th><th className="num">Meta</th><th style={{ width: 160 }}>Avance</th><th>Estado</th></tr>
               </thead>
               <tbody>
-                {objetivos.map(({ g, k, e }) => (
+                {objetivos.map(({ g, k, e, vivo }) => (
                   <tr key={g.id}>
                     <td><Link href={`/kpi/${k.id}#objetivos`}>{g.nombre}</Link></td>
                     <td>{k.nombre}</td>
@@ -50,13 +67,13 @@ export default async function Control() {
                     <td className="num">{fmt(e.actual, k.unidad)}{e.periodo && <span className="tenue"> · {mesCorto(e.periodo)}</span>}</td>
                     <td className="num">{fmt(g.meta, k.unidad)}</td>
                     <td>
-                      <div className={`progreso ${e.cumple ? "bien" : e.vencido ? "mal" : ""}`}><i style={{ width: `${Math.round(e.avance * 100)}%` }} /></div>
-                      <span className="tenue">{Math.round(e.avance * 100)} % del camino</span>
+                      <Avance snap={e.avance} hoy={vivo.avance} cumple={e.cumple} />
                     </td>
                     <td>{e.actual == null ? <span className="chip gris">Sin datos aún</span>
                       : e.cumple ? <span className="chip bien">Meta alcanzada</span>
                       : e.vencido ? <span className="chip mal">Vencido sin cumplir</span>
-                      : <span className="chip alerta">En curso</span>}</td>
+                      : <span className="chip alerta">En curso</span>}
+                      {vivo.cumple && !e.cumple && <> <span className="chip alerta" title="Se alcanza con los movimientos de hoy; se confirma al crear el snapshot">Alcanzada a hoy</span></>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -92,7 +109,7 @@ export default async function Control() {
                       )}
                     </p>
                   )}
-                  <Grafico cols={s.cols} filas={s.filas} tipo={k.grafico} alto={ult ? 110 : 170} mini={k.grafico !== "torta"} />
+                  <Grafico cols={s.cols} filas={pares[i].snapshot} movimientos={pares[i].movimientos} tipo={k.grafico} alto={ult ? 110 : 170} mini={k.grafico !== "torta"} />
                 </>
               )}
               <div className="acciones" style={{ marginTop: 12 }}>
@@ -103,6 +120,26 @@ export default async function Control() {
           );
         })}
       </div>
+
+      {arch.length > 0 && (
+        <section className="tarjeta" style={{ marginTop: 16 }}>
+          <h2>Indicadores archivados</h2>
+          <p className="tenue" style={{ margin: "0 0 8px" }}>Salen del tablero pero conservan su consulta, sus versiones y sus objetivos.</p>
+          <table>
+            <thead><tr><th>Indicador</th><th>Tipo</th><th>Versión</th><th /></tr></thead>
+            <tbody>
+              {arch.map((k) => (
+                <tr key={k.id}>
+                  <td><Link href={`/kpi/${k.id}`}>{k.nombre}</Link><br /><span className="tenue">{k.descripcion}</span></td>
+                  <td><span className="chip gris">{k.tipo_medida}</span></td>
+                  <td>{k.version} · {k.origen}</td>
+                  <td><form action={restaurarKpi}><input type="hidden" name="id" value={k.id} /><button className="suave">Restaurar</button></form></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </>
   );
 }

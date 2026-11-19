@@ -41,6 +41,7 @@ CREATE TABLE ctl.kgi (
     descripcion  text NOT NULL DEFAULT '',
     tipo_medida  text NOT NULL,
     meta         numeric NOT NULL,
+    valor_base   numeric,                -- valor del KPI al abrir la operación; de ahí se mide el avance
     desde        date NOT NULL,
     hasta        date NOT NULL,
     cerrado      boolean NOT NULL DEFAULT false,

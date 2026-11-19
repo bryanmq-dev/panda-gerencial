@@ -2,9 +2,13 @@ import { notFound } from "next/navigation";
 import { enlaces, q } from "@/lib/db";
 import { esSerie, evaluar } from "@/lib/kgi";
 import { fmt, hoy, kgis, kpi, mesCorto, serie, TIPOS } from "@/lib/kpi";
-import { archivarKpi, cerrarKgi, crearKgi } from "../../acciones";
+import { foto, ultimoSnapshot } from "@/lib/snapshot";
+import { combinar } from "@/lib/snapshot-reglas";
+import { archivarKpi, cerrarKgi, restaurarKpi } from "../../acciones";
+import Avance from "../../_c/Avance";
 import Editor from "../../_c/Editor";
 import Estrella from "../../_c/Estrella";
+import FormKgi from "../../_c/FormKgi";
 import Grafico from "../../_c/Grafico";
 
 export default async function Detalle({ params }: { params: Promise<{ id: string }> }) {
@@ -18,6 +22,10 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
        FROM ctl.kpi_version WHERE kpi_id = $1 ORDER BY version DESC`, [k.id]),
   ]);
   const dia = hoy();
+  const snap = await ultimoSnapshot();
+  const f = snap ? (await foto(snap.id)).get(k.id) : undefined;
+  // la foto vale mientras no se haya cambiado la consulta del indicador
+  const par = combinar(f && f.version === k.version ? f.filas : s.filas, s.filas);
   const admiteObjetivo = esSerie(s.filas);
   const abiertos = gs.filter((g) => !g.cerrado);
 
@@ -28,12 +36,12 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
         {k.descripcion}{" "}
         <span className="chip gris">{k.tipo_medida}</span>{" "}
         <span className="chip gris">mejora cuando {k.sentido === "mayor" ? "sube" : "baja"}</span>{" "}
-        <span className="chip">versión {k.version} · {k.origen}</span>
+        <span className="chip">versión {k.version} · {k.origen}</span>{k.archivado && <> <span className="chip mal">archivado</span></>}
       </p>
 
       <section className="tarjeta" style={{ marginBottom: 16 }}>
         {s.error ? <p className="aviso mal">{s.error}</p>
-          : <Grafico cols={s.cols} filas={s.filas} tipo={k.grafico} alto={300}
+          : <Grafico cols={s.cols} filas={par.snapshot} movimientos={par.movimientos} tipo={k.grafico} alto={300}
               metas={admiteObjetivo ? abiertos.map((g) => ({ nombre: g.nombre, valor: g.meta })) : []} />}
       </section>
 
@@ -63,7 +71,8 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
                 <th className="num">Meta</th><th style={{ width: 150 }}>Avance</th><th>Estado</th><th /></tr></thead>
               <tbody>
                 {gs.map((g) => {
-                  const e = evaluar(g, k.sentido, s.filas, dia);
+                  const e = evaluar(g, k.sentido, par.snapshot, snap?.corte ?? dia, true);   // la foto cuenta el mes en curso a su corte
+                  const vivo = evaluar(g, k.sentido, s.filas, dia, true);
                   return (
                     <tr key={g.id}>
                       <td>{g.nombre}<br /><span className="tenue">{g.descripcion}</span></td>
@@ -73,8 +82,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
                       <td className="num">{fmt(e.actual, k.unidad)}</td>
                       <td className="num">{fmt(g.meta, k.unidad)}</td>
                       <td>
-                        <div className={`progreso ${e.cumple ? "bien" : e.vencido ? "mal" : ""}`}><i style={{ width: `${Math.round(e.avance * 100)}%` }} /></div>
-                        <span className="tenue">{Math.round(e.avance * 100)} %</span>
+                        <Avance snap={e.avance} hoy={vivo.avance} cumple={e.cumple} />
                       </td>
                       <td>{g.cerrado ? <span className="chip gris">Cerrado</span>
                         : e.actual == null ? <span className="chip gris">Sin datos aún</span>
@@ -94,27 +102,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
             </table>
           </div>
         )}
-        {admiteObjetivo && (
-          <form action={crearKgi}>
-            <input type="hidden" name="kpi_id" value={k.id} />
-            <div className="rejilla cuatro" style={{ gap: 8 }}>
-              <label>Objetivo<input name="nombre" required placeholder="Llevar la conversión a 75 %" /></label>
-              <label>Meta ({k.unidad || "valor"})<input name="meta" type="number" step="any" required /></label>
-              <label>Desde<input name="desde" type="date" required defaultValue={dia} /></label>
-              <label>Hasta<input name="hasta" type="date" required /></label>
-            </div>
-            <div className="rejilla dos" style={{ gap: 8 }}>
-              <label>Tipo de medida
-                <select name="tipo_medida" defaultValue={k.tipo_medida}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select>
-              </label>
-              <label>Qué se va a hacer para lograrlo<input name="descripcion" /></label>
-            </div>
-            <div className="acciones">
-              <button>Agregar objetivo e iniciar operación</button>
-              <span className="tenue">La comparación parte del valor del mes de inicio y usa solo meses cerrados.</span>
-            </div>
-          </form>
-        )}
+        {admiteObjetivo && <FormKgi kpiId={k.id} unidad={k.unidad} tipoInicial={k.tipo_medida} tipos={TIPOS} serie={s.filas} hoy={dia} />}
       </section>
 
       <section className="tarjeta" style={{ marginBottom: 16 }}>
@@ -145,9 +133,9 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
         </table>
       </section>
 
-      <form action={archivarKpi}>
+      <form action={k.archivado ? restaurarKpi : archivarKpi}>
         <input type="hidden" name="id" value={k.id} />
-        <button className="suave">Archivar indicador</button>
+        <button className="suave">{k.archivado ? "Restaurar indicador" : "Archivar indicador"}</button>
       </form>
     </>
   );
