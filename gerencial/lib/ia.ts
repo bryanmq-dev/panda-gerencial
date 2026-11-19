@@ -66,6 +66,8 @@ Reglas de la consulta, que el sistema verifica al ejecutarla:
 - La primera columna es el eje y las siguientes son numéricas. Para una evolución en el tiempo, el eje es \
 dw.dim_fecha.periodo (primer día del mes), agrupado y ordenado por él; así el indicador admite objetivos. \
 Para comparar categorías, el eje es la etiqueta de texto.
+- Si el pedido es un valor único (un total, un promedio, un máximo o un conteo), devuelve una sola fila: la primera columna \
+una etiqueta fija de texto, como 'total', y la segunda el valor. No lo desgloses por mes ni por categoría si no se pidió.
 - Usa las etiquetas de categoría exactamente como aparecen en el esquema.
 - Escribe el SQL legible: una cláusula (SELECT, FROM, JOIN, WHERE, GROUP BY, ORDER BY) por línea.
 - Nombra las columnas en minúsculas y sin espacios, porque se muestran en la leyenda del gráfico.
@@ -95,7 +97,9 @@ export async function proponer(historial: Turno[]): Promise<RespuestaIA> {
       max_tokens: 16000,
       // el esquema es lo grande y estable: se cachea y cada pregunta solo paga lo nuevo
       cache_control: { type: "ephemeral" },
-      system: sistema,
+      // dos puntos de corte: el esquema (igual en toda pregunta, lo lee del caché cualquier consulta nueva)
+      // y, con cache_control de arriba, el historial de la conversación
+      system: [{ type: "text", text: sistema, cache_control: { type: "ephemeral" } }],
       messages: mensajes,
       output_config: { effort: "medium", format: zodOutputFormat(Salida) },
     });
