@@ -6,17 +6,18 @@ Dos aplicaciones Next.js sobre PostgreSQL, separadas a propósito:
 |---|---|---|
 | Para qué | Registrar lo que pasa: visitas, ventas, lotes, inspección de cámaras y merma | Medir: indicadores (KPI) desde el almacén de datos y objetivos (KGI) sobre ellos |
 | Base | `panda_oltp`, modelo relacional normalizado | `panda_dw`, esquema estrella + tablas de control |
-| URL | http://localhost:3001 | http://localhost:3012 |
+| URL | por túnel de Cloudflare (ver abajo); ningún puerto se publica | ídem |
 | Backend | *server actions* de Next, sin API aparte | *server actions* de Next, sin API aparte |
 
-Las dos bases viven en un solo servidor Postgres (`localhost:5441`, usuario y clave `panda`). El almacén
+Las dos bases viven en un solo servidor Postgres, accesible solo por la red interna de Docker (`db:5432`, usuario y clave `panda`; no se publica al host). El almacén
 lee la base transaccional por `postgres_fdw`, de solo lectura.
 
 ## Cómo se ejecuta
 
 ```bash
-cd proyecto_final
-docker compose up --build        # la primera vez tarda: siembra ~119 mil filas y hace la primera carga
+docker compose --profile quick up -d --build   # demo lista: siembra ~119 mil filas sola; sin .env ni pasos extra
+docker compose logs tunnel-ventas tunnel-gerencial | grep trycloudflare   # URLs públicas
+# con dominio propio: CLOUDFLARE_TUNNEL_TOKEN en .env y --profile token (hostnames -> http://ventas:3000, http://gerencial:3000)
 ```
 
 Las tres piezas esperan a que el almacén esté cargado. Para empezar de cero, borrando los datos:
@@ -29,8 +30,8 @@ docker compose down -v
 (el archivo no se versiona). Sin clave, el asistente lo avisa y todo lo demás funciona. El modelo se cambia con la variable
 `ANTHROPIC_MODEL` (por defecto `claude-haiku-5-5`).
 
-Sin Docker, para desarrollo: `docker compose up -d db`, y en cada carpeta `npm install && npm run dev`
-(ventas en el 3001, gerencial en el 3012).
+Para desarrollo sin Docker la base no está publicada: agregue temporalmente `ports: ["5441:5432"]` al servicio `db` y, en cada carpeta, `npm install && npm run dev`
+(puertos 3001 y 3012).
 
 ## Los datos
 
