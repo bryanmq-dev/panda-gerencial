@@ -3,13 +3,11 @@ name: panda-final
 # DEMO lista para desplegar: `docker compose up -d --build` y nada más.
 #  - Todo corre en la red interna `panda` del proyecto: la base de datos NO se
 #    publica al host; las apps hablan con ella por el nombre `db`.
-#  - NINGÚN puerto se publica al host: la entrada es un túnel de Cloudflare.
-#      · Con dominio propio: ponga CLOUDFLARE_TUNNEL_TOKEN en .env y en el panel de
-#        Cloudflare (Zero Trust > Tunnels) apunte los hostnames a http://ventas:3000
-#        y http://gerencial:3000.
-#      · Sin dominio (URL temporal *.trycloudflare.com):
-#        docker compose --profile quick up -d --build
-#        docker compose logs tunnel-ventas tunnel-gerencial | grep trycloudflare
+#  - NINGÚN puerto se publica al host. La entrada es el túnel de Cloudflare que ya
+#    corre en Docker: conéctelo a la red `panda-internal`
+#      docker network connect panda-internal <contenedor-cloudflared>
+#    y en Published applications use como servicio:
+#      http://panda-ventas:3000     http://panda-gerencial:3000
 #  - La base se siembra sola la primera vez (db/00_init.sh: esquema + ~119 mil filas
 #    + primera carga del almacén). Para repetir: docker compose down -v
 #  - Todas las variables traen valor de demostración; se pueden sobrescribir desde
@@ -40,7 +38,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://panda:panda@db:5432/panda_oltp
-    networks: [panda]
+    networks:
+      panda:
+        aliases: [panda-ventas]
     depends_on:
       db: { condition: service_healthy }
 
@@ -53,37 +53,11 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
       # opcional: sin clave el asistente lo avisa y el resto funciona
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    networks: [panda]
+    networks:
+      panda:
+        aliases: [panda-gerencial]
     depends_on:
       db: { condition: service_healthy }
-
-  # Túnel con token (dominio propio). Solo arranca si hay token.
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
-    networks: [panda]
-    profiles: ["token"]
-    depends_on: [ventas, gerencial]
-
-  # Túneles rápidos sin cuenta: URL aleatoria por app (ver los logs).
-  tunnel-ventas:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://ventas:3000
-    networks: [panda]
-    profiles: ["quick"]
-    depends_on: [ventas]
-
-  tunnel-gerencial:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://gerencial:3000
-    networks: [panda]
-    profiles: ["quick"]
-    depends_on: [gerencial]
 
 networks:
   panda:

@@ -15,9 +15,9 @@ lee la base transaccional por `postgres_fdw`, de solo lectura.
 ## Cómo se ejecuta
 
 ```bash
-docker compose --profile quick up -d --build   # demo lista: siembra ~119 mil filas sola; sin .env ni pasos extra
-docker compose logs tunnel-ventas tunnel-gerencial | grep trycloudflare   # URLs públicas
-# con dominio propio: CLOUDFLARE_TUNNEL_TOKEN en .env y --profile token (hostnames -> http://ventas:3000, http://gerencial:3000)
+docker compose up -d --build    # demo lista: siembra ~119 mil filas sola; sin .env ni pasos extra
+docker network connect panda-internal <contenedor-cloudflared>   # una sola vez
+# Cloudflare > Published applications: http://panda-ventas:3000 y http://panda-gerencial:3000
 ```
 
 Las tres piezas esperan a que el almacén esté cargado. Para empezar de cero, borrando los datos:
