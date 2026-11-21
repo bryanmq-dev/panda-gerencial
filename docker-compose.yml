@@ -14,7 +14,7 @@ name: panda-final
 #    un archivo .env (opcional). Credenciales de demo: cámbielas en producción.
 services:
   db:
-    image: postgres:17-alpine
+    build: ./db   # la imagen lleva los scripts de inicio: no se montan desde el repositorio
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-panda}
@@ -24,7 +24,6 @@ services:
     networks: [panda]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # las bases existen recién cuando termina el seeder y la primera carga
       test: ["CMD-SHELL", "psql -U panda -d panda_dw -tAc 'select 1 from ctl.kgi limit 1' | grep -q 1"]
